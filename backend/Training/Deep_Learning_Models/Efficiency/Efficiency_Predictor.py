@@ -11,7 +11,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # Try importing TensorFlow with a fallback to scikit-learn for model creation
 try:
     import tensorflow as tf
-    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.models import Sequential, load_model
     from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
     from tensorflow.keras.callbacks import (
         EarlyStopping,
@@ -39,7 +39,7 @@ os.makedirs("results", exist_ok=True)
 print("Loading and preprocessing the dataset...")
 
 # Load the dataset (using the training subset which has selected features)
-df = pd.read_csv("military_performance_training_data.csv")
+df = pd.read_csv("../../Dataset/Efficiency/military_performance_training_data.csv")
 
 # Check available features
 print("Dataset shape:", df.shape)
@@ -124,7 +124,7 @@ if USE_TENSORFLOW:
             monitor="val_loss", patience=15, restore_best_weights=True, verbose=1
         ),
         ModelCheckpoint(
-            filepath="models/efficiency_predictor_best.h5",
+            filepath="models/efficiency_predictor_best.keras",
             monitor="val_loss",
             save_best_only=True,
             verbose=1,
@@ -151,8 +151,8 @@ if USE_TENSORFLOW:
     print(f"\nTest Mean Absolute Error: {test_mae:.4f}")
 
     # Save the final model
-    model.save("models/efficiency_predictor_final.h5")
-    print("Model saved to 'models/efficiency_predictor_final.h5'")
+    model.save("models/efficiency_predictor_final.keras")
+    print("Model saved to 'models/efficiency_predictor_final.keras'")
 
     # Plot training history
     plt.figure(figsize=(12, 5))
@@ -293,14 +293,19 @@ def predict_efficiency(
     """
     # Determine model path if not provided
     if model_path is None:
-        if os.path.exists("models/efficiency_predictor_final.h5"):
-            model_path = "models/efficiency_predictor_final.h5"
+        if os.path.exists("models/efficiency_predictor_final.keras"):
+            model_path = "models/efficiency_predictor_final.keras"
+            is_tf_model = True
+        elif os.path.exists("models/efficiency_predictor_best.keras"):
+            model_path = "models/efficiency_predictor_best.keras"
             is_tf_model = True
         else:
             model_path = "models/efficiency_predictor_final.joblib"
             is_tf_model = False
     else:
-        is_tf_model = model_path.endswith(".h5")
+        is_tf_model = model_path.endswith((".h5", ".keras"))
+
+    print(f"Loading model from {model_path}")
 
     # Load the preprocessor
     preprocessor = joblib.load(preprocessor_path)
@@ -310,8 +315,6 @@ def predict_efficiency(
 
     # Load appropriate model type and make predictions
     if is_tf_model:
-        from tensorflow.keras.models import load_model
-
         model = load_model(model_path)
         predictions = model.predict(X_new_processed)
         return predictions.flatten()
@@ -323,14 +326,30 @@ def predict_efficiency(
 print("\nModel Training and Evaluation Complete!")
 print("Results and visualizations saved in the 'results' folder")
 
-# Example of how to use the prediction function
-print("\nExample prediction with sample data:")
-sample_data = X_test.iloc[:5]  # Take 5 samples from test set
-sample_predictions = predict_efficiency(sample_data)
-actual_values = y_test.iloc[:5].values
+# Main execution
+if __name__ == "__main__":
+    print("Testing prediction functionality...")
 
-# Compare predictions with actual values
-for i, (pred, actual) in enumerate(zip(sample_predictions, actual_values)):
-    print(
-        f"Sample {i+1}: Predicted={pred:.4f}, Actual={actual:.4f}, Difference={abs(pred-actual):.4f}"
-    )
+    # Load the dataset
+    print("Loading test data...")
+    df = pd.read_csv("../Dataset/military_performance_training_data.csv")
+
+    # Use the first 5 rows as sample data
+    sample_data = df.drop("Efficiency", axis=1).iloc[:5]
+    actual_values = df["Efficiency"].iloc[:5].values
+
+    # Make predictions
+    print("Making predictions...")
+    try:
+        sample_predictions = predict_efficiency(sample_data)
+
+        # Compare predictions with actual values
+        print("\nPrediction Results:")
+        for i, (pred, actual) in enumerate(zip(sample_predictions, actual_values)):
+            print(
+                f"Sample {i+1}: Predicted={pred:.4f}, Actual={actual:.4f}, Difference={abs(pred-actual):.4f}"
+            )
+
+        print("\nPrediction test successful!")
+    except Exception as e:
+        print(f"Error during prediction: {str(e)}")
